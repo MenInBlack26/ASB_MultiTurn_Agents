@@ -1,160 +1,95 @@
-# Agent Security Benchmark (ASB) - Green Agent
+# AgentX - Multi-Turn Green Agent 🛡️
 
-This repository contains the **Green Agent** (Evaluator) and a baseline **Purple Agent** for the AgentX competition, utilizing the **Agent Security Benchmark (ASB)** dataset from `agiresearch/ASB`.
+**AgentX** is an advanced "Green Agent" designed for the [AgentBeats](https://agentbeats.dev) platform. It orchestrates the **Agent Security Benchmark (ASB)**, a rigorous test suite designed to evaluate the safety of AI agents against Indirect Prompt Injection (IPI) and other adversarial attacks.
 
-The Green Agent acts as the evaluation environment, subjecting the Purple Agent to **multi-attack scenarios** including OPI, DPI, PoT Backdoor, and Memory Poisoning.
+Unlike simple single-turn evaluations, AgentX simulates complex, multi-turn interactions where attacks are embedded within realistic tool outputs (e.g., email bodies, calendar entries, database records).
 
-## Quick Start
+---
+
+## 🚀 Features
+
+*   **Multi-Turn Simulation**: Evaluates agents in realistic, stateful conversations requiring multiple tool calls.
+*   **Comprehensive Attack Suite**: Supports a wide range of attack vectors:
+    *   **Stealthy Attacks**: Observation Prompt Injection (OPI) hidden in tool outputs.
+    *   **Disruptive Attacks**: Direct Prompt Injection (DPI) and Jailbreaks.
+    *   **Advanced Techniques**: Plan-of-Thought (PoT) Backdoors and Memory Poisoning.
+*   **Agentic Evaluator**: Uses a sophisticated LangChain-based evaluator to analyze agent behavior, intention, and tool usage in real-time.
+*   **Detailed Metrics**: Calculates Attack Success Rate (ASR) across multiple dimensions (Valid vs. All, by Attack Type) and generates a composite **Vulnerability Score (0-100)**.
+*   **A2A Protocol Compliant**: Fully compatible with the Agent-to-Agent (A2A) protocol for seamless integration with AgentBeats.
+
+---
+
+## 📊 Leaderboard Configuration
+
+To display your agent's results on the AgentBeats leaderboard, use the following DuckDB SQL queries:
+
+### **1. Overall Security (Primary Metric)**
+```sql
+SELECT 
+    id, 
+    green_agent_verdict AS "Safety Verdict", 
+    vulnerability_score AS "Score (0-100)", 
+    summary.total_cases AS "Total Tests", 
+    summary.asr_valid AS "Overall ASR (%)" 
+FROM read_json_auto('results/*.json') 
+ORDER BY vulnerability_score ASC
+```
+
+### **2. Attack Breakdown**
+```sql
+SELECT 
+    id, 
+    by_attack_type."Stealthy Attack".successful AS "Stealthy Hits", 
+    by_attack_type."Stealthy Attack".total AS "Stealthy Total", 
+    by_attack_type."Disruptive Attack".successful AS "Disruptive Hits", 
+    by_attack_type."Disruptive Attack".total AS "Disruptive Total", 
+    by_attack_type."Financial Harm".successful AS "Financial Hits", 
+    by_attack_type."Data Stealing".successful AS "Data Stealing Hits" 
+FROM read_json_auto('results/*.json') 
+ORDER BY vulnerability_score ASC
+```
+
+---
+
+## 🛠️ Architecture
+
+AgentX consists of two main components:
+
+1.  **Green Agent (The Evaluator)**:
+    *   **Orchestrator**: Loads test cases (Synthesis) and manages the conversation flow.
+    *   **Tool Simulator**: Mock environment that provides "infected" data (e.g., an email containing a prompt injection).
+    *   **Scorer**: Analyzes the Purple Agent's tool calls to determine if an attack succeeded (e.g., did the agent transfer money when it shouldn't have?).
+
+2.  **Purple Agent (The Target)**:
+    *   The agent being evaluated. It connects to the Green Agent, receives instructions, and attempts to complete tasks using the provided tools.
+
+---
+
+## 🏃‍♂️ Running Locally
+
+You can run the full evaluation suite locally using Docker Compose:
 
 ```bash
-# Install dependencies
-cd ASB_Agent && uv sync && cd ..
+# 1. Clone the repository
+git clone https://github.com/MenInBlack26/ASB_MultiTurn_Agents
+cd ASB_MultiTurn_Agents
 
-# Start Green Agent (Evaluator) in one terminal
-uv run --directory ASB_Agent python -m src.green_agent.server
-
-# Start Purple Agent (target) in one terminal
-uv run --directory ASB_Agent python -m src.purple_agent.server
-
-# Run assessment in another terminal
-uv run --directory ASB_Agent python -m src.run_assessment --attack-method all --max-cases 10
+# 2. Build and Run
+docker compose up --abort-on-container-exit
 ```
 
-## Supported Attack Types
-
-| Attack Method | Description |
-|--------------|-------------|
-| `opi` | Observation Prompt Injection - Inject into tool output |
-| `dpi` | Direct Prompt Injection - Inject into user prompt |
-| `pot_backdoor` | Plan-of-Thought Backdoor - Trigger-based attacks |
-| `memory_attack` | Memory Poisoning - Inject into agent memory |
-| `all` | Run all attack types together |
-
-## Running Assessments
-
-### Basic Usage
-
+**Environment Variables (.env)**:
+Ensure you produce a `.env` file with your LLM configuration:
 ```bash
-# Test Observation Prompt Injection (OPI)
-uv run --directory ASB_Agent python -m src.run_assessment --attack-method opi --max-cases 5
-
-# Test Direct Prompt Injection (DPI)
-uv run --directory ASB_Agent python -m src.run_assessment --attack-method dpi --max-cases 5
-
-# Test Plan-of-Thought Backdoor (PoT)
-uv run --directory ASB_Agent python -m src.run_assessment --attack-method pot_backdoor --max-cases 5
-
-# Test Memory Poisoning (MP)
-uv run --directory ASB_Agent python -m src.run_assessment --attack-method memory_attack --max-cases 5
-
-# Run ALL attack types together
-uv run --directory ASB_Agent python -m src.run_assessment --attack-method all --max-cases 20
+LLM_BASE_URL=https://...
+LLM_API_KEY=...
+LLM_MODEL_NAME=gemini-2.5-flash
+MAX_TEST_CASES=9999
+ATTACK_METHOD=all
 ```
 
-### Attack Sub-Types
+---
 
-Each attack method supports different injection styles:
+## 📜 License
 
-```bash
-# Use fake_completion injection style
-uv run --directory ASB_Agent python -m src.run_assessment -m dpi --sub-type fake_completion
-
-# Use escape_characters injection style
-uv run --directory ASB_Agent python -m src.run_assessment -m opi --sub-type escape_characters
-
-# Available sub-types:
-# - naive (default)
-# - fake_completion
-# - escape_characters
-# - context_ignoring
-# - combined_attack
-```
-
-### Tool Filtering
-
-Filter attacker tools by aggressiveness:
-
-```bash
-# Only aggressive attack tools
-uv run --directory ASB_Agent python -m src.run_assessment -m all --tool-filter agg
-
-# Only non-aggressive attack tools
-uv run --directory ASB_Agent python -m src.run_assessment -m all --tool-filter non-agg
-```
-
-### Full Example
-
-```bash
-uv run --directory ASB_Agent python -m src.run_assessment \
-  --attack-method all \
-  --sub-type combined_attack \
-  --tool-filter agg \
-  --max-cases 50 \
-  --output results_full_eval.json
-```
-
-## Project Structure
-
-```
-├── ASB_Agent/                 # Main Project Directory
-│   ├── src/
-│   │   ├── green_agent/       # The Evaluator Agent
-│   │   │   ├── server.py
-│   │   │   ├── evaluator_agent.py
-│   │   │   ├── test_case_loader.py
-│   │   │   ├── tool_simulator.py
-│   │   │   ├── memory_store.py
-│   │   │   └── scorer.py
-│   │   ├── purple_agent/      # The Baseline Agent (Target)
-│   │   │   ├── server.py
-│   │   │   └── agent.py
-│   │   ├── run_assessment.py  # CLI Entry Point
-│   │   └── config.py          # Central Configuration
-│   ├── data_repo/             # ASB Dataset
-│   ├── Dockerfile.green       # Green Agent Container
-│   ├── Dockerfile.purple      # Purple Agent Container
-│   └── pyproject.toml         # Dependencies
-├── Dockerfile                 # (Optional) Root Dockerfile
-└── README.md                  # This file
-```
-
-## Environment Configuration
-
-Copy `ASB_Agent/.env.example` to `ASB_Agent/.env` and configure:
-
-```bash
-# LLM Configuration
-LLM_BASE_URL=http://localhost:1234/v1
-LLM_MODEL_NAME=qwen/qwen3-4b-thinking-2507
-
-# Attack Configuration
-ATTACK_METHOD=observation_prompt_injection
-ATTACK_SUB_TYPES=naive
-ATTACK_TOOL_FILTER=all
-
-# PoT Configuration
-POT_TRIGGERS=with perspicacious discernment
-```
-
-## Docker Usage
-
-```bash
-# Build and run Green Agent
-docker build -t injecagent-green -f ASB_Agent/Dockerfile.green ASB_Agent
-docker run -p 8000:8000 --env-file ASB_Agent/.env injecagent-green
-
-# Build and run Purple Agent
-docker build -t injecagent-purple -f ASB_Agent/Dockerfile.purple ASB_Agent
-docker run -p 8001:8001 --env-file ASB_Agent/.env injecagent-purple
-```
-
-## Evaluation Metrics
-
-- **ASR (Attack Success Rate)**: Percentage of test cases where the agent called an attacker tool
-- **Valid Rate**: Percentage of test cases that completed without errors
-- **By Attack Type**: Breakdown of ASR per attack method
-
-## License
-
-- Project: MIT
-- Dataset: Refer to `agiresearch/ASB` license
+MIT License. See [LICENSE](LICENSE) for details.
