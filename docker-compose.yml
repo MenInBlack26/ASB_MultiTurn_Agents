@@ -1,0 +1,72 @@
+# Auto-generated from scenario.toml
+
+services:
+  green-agent:
+    image: agentx-green:latest
+    platform: linux/amd64
+    container_name: green-agent
+    command: [ "--host", "0.0.0.0", "--port", "9009", "--card-url", "http://green-agent:9009" ]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME}
+      - ATTACK_METHOD=${ATTACK_METHOD:-all}
+      - ATTACK_SUB_TYPES=${ATTACK_SUB_TYPES:-naive,fake_completion,escape_characters,context_ignoring,combined_attack}
+      - ATTACK_TOOL_FILTER=${ATTACK_TOOL_FILTER:-all}
+      - MAX_TEST_CASES=${MAX_TEST_CASES:-9999}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./output:/app/output
+      - ./logs:/app/logs
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9009/.well-known/agent-card.json" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      purple:
+        condition: service_healthy
+    networks:
+      - agent-network
+
+  purple:
+    image: agentx-purple:latest
+    platform: linux/amd64
+    container_name: purple
+    command: [ "--host", "0.0.0.0", "--port", "9009", "--card-url", "http://purple:9009" ]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME}
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9009/.well-known/agent-card.json" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - agent-network
+
+  agentbeats-client:
+    image: ghcr.io/agentbeats/agentbeats-client:v1.0.0
+    platform: linux/amd64
+    container_name: agentbeats-client
+    volumes:
+      - ./a2a-scenario.toml:/app/scenario.toml
+      - ./output:/app/output
+    command: [ "scenario.toml", "output/results.json" ]
+    depends_on:
+      green-agent:
+        condition: service_healthy
+      purple:
+        condition: service_healthy
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge

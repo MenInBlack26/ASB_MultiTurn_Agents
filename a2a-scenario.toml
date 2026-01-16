@@ -1,0 +1,10 @@
+[green_agent]
+endpoint = "http://green-agent:9009"
+
+[[participants]]
+role = "purple"
+endpoint = "http://purple:9009"
+
+[config]
+case_type = "dh"
+max_cases = 10
